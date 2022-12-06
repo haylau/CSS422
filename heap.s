@@ -31,6 +31,7 @@ _kinit
             LDR     R0, =kinit_b
             LDR     R1, =kinit_b_n
             BL      _bzero
+
             B       _return
 
 ; void* _kalloc(int size) 
@@ -42,8 +43,8 @@ _kalloc
 
             LDR     R2, =mcb_top
             LDR     R3, =mcb_bot
-
             BL      _ralloc
+            
             B       _return
 
 ; void* _kfree(void* ptr)
