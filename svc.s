@@ -38,7 +38,9 @@ _systemcall_table_jump
 		LSL		r10, #0x2		; system call number * 4
         ADD     r11, r11, r10
 		LDR		r11, [r11]
+		PUSH	{LR}
         BLX     r11             ; jump to respective function
+		POP		{LR}
 		BX		lr				; return to SVC_Handler
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -68,3 +70,6 @@ _sys_free
 		BX		lr
 		
 		END
+
+
+		

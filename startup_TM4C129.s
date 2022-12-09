@@ -266,11 +266,13 @@ UsageFault_Handler\
 SVC_Handler     PROC
                 EXPORT  SVC_Handler               [WEAK]
                 IMPORT  _systemcall_table_jump
+				PUSH	{R1-R12, LR}
 				LDR     R1, =_systemcall_table_jump
 				BLX     R1
 				; do not update the following two lines
                 MRS	R1, PSP						; added for CSS422 project
 				STR	R0, [R1]					; added for CSS422 project
+				POP		{R1-R12, LR}
                 BX      LR
                 ENDP
 DebugMon_Handler\
