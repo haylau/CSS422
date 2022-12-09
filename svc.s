@@ -36,7 +36,8 @@ _systemcall_table_jump
 		LDR		r11, =SYSTEMCALLTBL	; load the starting address of SYSTEMCALLTBL
 		MOV		r10, r7			; copy the system call number into r10
 		LSL		r10, #0x2		; system call number * 4
-        LDR     r11, [r11, r10] 
+        ADD     r11, r11, r10
+		LDR		r11, [r11]
         BLX     r11             ; jump to respective function
 		BX		lr				; return to SVC_Handler
 
@@ -67,6 +68,3 @@ _sys_free
 		BX		lr
 		
 		END
-
-
-		

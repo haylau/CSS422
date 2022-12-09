@@ -13,11 +13,6 @@ MCB_TOTAL       EQU     512
 
 INVALID         EQU     -1
 
-MCB_INIT_A      EQU     0x20001000
-MCB_INIT_A_N    EQU     0x00004000
-MCB_INIT_B      EQU     0x20006804
-MCB_INIT_B_N    EQU     0x000003FC
-
 ;
 ; Each MCB Entry
 ; FEDCBA9876543210
@@ -32,22 +27,23 @@ MCB_INIT_B_N    EQU     0x000003FC
 
     EXPORT  _kinit
 _kinit
-    IMPORT  _bzero
     PUSH    {R1-R12, LR}
 
-    LDR     R0, =MCB_INIT_A
-    LDR     R1, =MCB_INIT_A_N
-    BL      _bzero
+	LDR		R0, =MCB_TOP
+	LDR		R1, =MAX_SIZE
+	STRH	R1, [R0]
+	MOV		R2, #0
 
-    LDR     R0, =MAX_SIZE
-    LDR     R1, =MCB_TOP
-    LDRH    R0, [R1]
-
-    LDR     R0, =MCB_INIT_B
-    LDR     R1, =MCB_INIT_B_N
-    BL      _bzero
-
-    B       _return
+_kinit_loop	
+	LDR		R1, =MCB_BOT
+	CMP		R0, R1
+	BGT		_kinit_end
+	ADD		R0, R0, #2
+	STRH	R2, [R0]
+	B		_kinit_loop
+_kinit_end		
+    POP     {R1-R12, LR}
+	BX		LR
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Kernel Memory Allocation
@@ -60,7 +56,7 @@ _kalloc
 ; r0 = return
 ; r1 = size
     BL      _ralloc
-    B       _return
+    B       _kalloc_end
 ; recursive helper for kalloc
 _ralloc
 ; r2 = left_mcb_addr
@@ -105,14 +101,14 @@ _ralloc
     MOV     R2, R7
 ; r3 = right_mcb_addr (no change)
     BL      _ralloc
-    B       _return             ; return heap_addr (r0)  
+    B       _kalloc_end             ; return heap_addr (r0)  
 
     LDR     R0, [R7]            
     LSRS    R0, R0, #1          ; set C if odd
-    LDRHCC  R7, R10             ; load halfword at midpoint_mcb_addr
+    LDRHCC  R7, [R10]           ; load halfword at midpoint_mcb_addr
 
     MOV     R0, R8              ; return heap_addr
-    B       _return                  
+    B       _kalloc_end                  
 _ralloc_r
 ; recursive case
 ; if addr is even return 0;
@@ -121,14 +117,14 @@ _ralloc_r
 
     ITT     CC
     MOVCC   R0, #0
-    BCC     _return
+    BCC     _kalloc_end
 
 ; addr is below heap range return 0;
     LDRH    R0, [R2]
     CMP     R0, R9
     ITT     LT
     MOVLT   R0, #0
-    BLT     _return
+    BLT     _kalloc_end
 
 ; stores heap size with LSB set to 1 
     ORR     R0, R9, #1
@@ -138,7 +134,10 @@ _ralloc_r
     SUB     R0, R2, R11
     LSL     R0, R0, #4
     ADD     R0, R0, R11
-    B       _return
+    B       _kalloc_end
+_kalloc_end
+    POP     {R1-R12, LR}
+    BX      LR    
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Kernel Memory De-allocation
@@ -157,12 +156,12 @@ _kfree
     CMP     R1, R2
     ITT     LT
     MOVLT   R0, #0
-    BLT     _return   
+    BLT     _kfree_end   
 
     CMP     R1, R3
     ITT     GT
     MOVGT   R0, #0
-    BGT     _return
+    BGT     _kfree_end
 
     LDR     R4, =MCB_TOP
     ADD     R4, R4, R1
@@ -171,14 +170,13 @@ _kfree
 
     PUSH    {R1}
     MOV     R1, R4
-    BL      _rfree
+    BL      _kfree_end
     POP     {R1}
     CMP     R0, #0
-    ITTEE   EQ
+    ITE   EQ
     MOVEQ   R0, #0
-    BEQ    _return
     MOVNE   R0, R1
-    BNE    _return
+    BNE    _kfree_end
 
 ; recursive helper for kfree
 _rfree
@@ -202,7 +200,7 @@ _rfree
 
     STRH    R1, [R2]    ; store free'd bytes
 
-    DIV     R0, R4, R5
+    UDIV     R0, R4, R5
     RORS    R0, R0, #1
     BCS     _rfree_odd
 
@@ -210,7 +208,7 @@ _rfree
     CMP     R0, R7
     ITT     GE
     MOVGE   R0, #0
-    BGE     _return
+    BGE     _kfree_end
 
     ADD     R0, R1, R5
 ; r8 = mcb_buddy
@@ -218,14 +216,14 @@ _rfree
     RORS    R0, R8, #1
     ITT     CS
     MOVCS   R1, R0
-    BCS     _return
+    BCS     _kfree_end
 
     LSR     R8, R8, #5
     LSL     R8, R8, R5
     CMP     R8, R6
     ITT     NE
-    MOVNE     R0, R1
-    BNE     _return
+    MOVNE   R0, R1
+    BNE     _kfree_end
     ADD     R0, R1, R5
     MOV     R9, #0
     STRH    R9, [R0]
@@ -234,14 +232,14 @@ _rfree
     STRH    R6, [R1]
 
     BL      _rfree
-    B       _return          
+    B       _kfree_end          
 
 _rfree_odd
     SUB     R0, R1, R5
     CMP     R0, R3
     ITT     LT
     MOVLT   R0, #0
-    BLT     _return
+    BLT     _kfree_end
 
     SUB     R0, R1, R5
 ; r8 - mcb_buddy
@@ -251,7 +249,7 @@ _rfree_odd
     CMP     R8, R6
     ITT     NE
     MOVNE   R0, R1
-    BNE     _return
+    BNE     _kfree_end
 
     MOV     R9, #0
     STRH    R9, [R1]
@@ -261,9 +259,9 @@ _rfree_odd
 
     SUB     R1, R1, R5
     BL      _rfree
-    B       _return
-
-; standard return protocol
-_return       
+    B       _kfree_end
+_kfree_end
     POP     {R1-R12, LR}
-    BX      LR
+    BX      LR    
+	
+	END

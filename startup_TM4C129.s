@@ -266,8 +266,8 @@ UsageFault_Handler\
 SVC_Handler     PROC
                 EXPORT  SVC_Handler               [WEAK]
                 IMPORT  _systemcall_table_jump
-				LDR     R0, =_systemcall_table_jump
-				BLX     R0
+				LDR     R1, =_systemcall_table_jump
+				BLX     R1
 				; do not update the following two lines
                 MRS	R1, PSP						; added for CSS422 project
 				STR	R0, [R1]					; added for CSS422 project
