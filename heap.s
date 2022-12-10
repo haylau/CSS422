@@ -3,13 +3,19 @@
 
 HEAP_TOP        EQU     0x20001000
 HEAP_BOT        EQU     0x20004FE0
+HEAP_BOUND      EQU     0x20005000
+
 MAX_SIZE        EQU     0x00004000
 MIN_SIZE        EQU     0x00000020
 
 MCB_TOP         EQU     0x20006800
-MCB_BOT         EQU     0x20003BFE
+MCB_BOT         EQU     0x20006BFE
+MCB_LBOUND      EQU     0x20006804
+MCB_UBOUND      EQU     0x20006C00
 MCB_ENT_SZ      EQU     0x00000002
 MCB_TOTAL       EQU     512    
+
+
 
 INVALID         EQU     -1
 
@@ -28,19 +34,27 @@ INVALID         EQU     -1
     EXPORT  _kinit
 _kinit
     PUSH    {R1-R12, LR}
-
 	LDR		R0, =MCB_TOP
 	LDR		R1, =MAX_SIZE
-	STRH	R1, [R0]
+	STR		R1, [R0]
 	MOV		R2, #0
 
-_kinit_loop	
-	LDR		R1, =MCB_BOT
+	LDR		R0, =HEAP_TOP
+    LDR     R1, =HEAP_BOUND
+_kinit_heap
+    CMP		R0, R1
+    ; jump to next loop
+    ITTT    GT
+    LDRGT   R0, =MCB_LBOUND
+    LDRGT   R1, =MCB_UBOUND
+	BGT		_kinit_mcb
+	STRH	R2, [R0], #2
+	B		_kinit_heap
+_kinit_mcb	
 	CMP		R0, R1
-	BGT		_kinit_end
-	ADD		R0, R0, #2
-	STRH	R2, [R0]
-	B		_kinit_loop
+    BGT     _kinit_end
+	STRB	R2, [R0], #1
+	B		_kinit_mcb
 _kinit_end		
     POP     {R1-R12, LR}
 	BX		LR
@@ -52,18 +66,19 @@ _kinit_end
 ; return            - address of SRAM space
     EXPORT  _kalloc
 _kalloc
-    PUSH    {R1-R12, LR}        
+    PUSH    {LR}        
 ; r0 = size
 ; r1 = MCB_TOP
     LDR     R1, =MCB_TOP
 ; r2 = MCB_BOT 
     LDR     R2, =MCB_BOT
     BL      _ralloc
-    POP     {R1-R12, LR}  
+    POP     {LR}  
     BX      LR
 
 ; recursive helper for kalloc
 _ralloc
+	PUSH	{LR}
 ; r0 = size
 ; r1 = left_mcb_address
 ; r2 = right_mcb_address
@@ -83,15 +98,17 @@ _ralloc
 ; r9 = act_half_heap_size
     LSL     R9, R5, #4
 
-; base case : size <= act_half_heap_size
+; base case : size > act_half_heap_size
     CMP     R0, R9
-    BGT     _ralloc_tophalf
+    BGT     _ralloc_tophalf ; base case
 
-    PUSH    {R0-R3, LR}
+    PUSH    {R1-R12}
+	MOV		R10, R0		; preserve r0
     SUB     R2, R6, R3  ; right = midpoint - mcb_ent_size
     BL      _ralloc
-    MOV     R7, R0      ; head_addr = ralloc(  )
-    POP     {R0-R3, LR}
+    POP     {R1-R12}
+	MOV     R7, R0      ; heap_addr = ralloc(  )
+	MOV		R0, R10		; restore r0
 
     CMP     R7, #0
     BEQ     _ralloc_ptrzero
@@ -101,42 +118,44 @@ _ralloc
     STRHCC  R9, [R6]
 
     MOV     R0, R7      ; return heap_addr
-    BX      LR
+    B       _kalloc_end
 
 _ralloc_ptrzero
 
-    PUSH    {LR}
+; if heap_addr == 0 --> return ralloc(size, midpoint, right)
     MOV     R1, R6      ; left = midpoint
     BL      _ralloc          
-    POP     {LR}
-    BX      LR          ; return
+    B       _kalloc_end
 
 _ralloc_tophalf
 
+; if *left_mcb_addr is odd --> return 0
     LDR     R10, [R1]
     LSRS    R10, R10, #1
     ITT     CS
     MOVCS   R0, #0
-    BXCS    LR
+    BCS     _kalloc_end
 
+; if *left_mcb_addr < act_entire_heap_size --> return 0 
     LDRH    R10, [R1]
     CMP     R10, R9
     ITT     LT
     MOVLT   R0, #0
-    BXLT    LR
+    BLT     _kalloc_end
 
-    ORR     R10, R9, #1
+; *left_mcb_addr = act_entire_heap_size | 1
+    ORR     R10, R8, #1
     STRH    R10, [R1]
-
+; return (heap_top + (left_mcb_addr - mcb_top) * 16)
     LDR     R10, =MCB_TOP
     SUB     R10, R1, R10
     LDR     R11, =HEAP_TOP
     ADD     R10, R11, R10
-    LSL     R0, R10, #4
-    BX      LR
+	LSL     R0, R10, #4
+    B       _kalloc_end
 
 _kalloc_end
-    POP     {R1-R12, LR}
+    POP     {LR}
     BX      LR    
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -146,7 +165,7 @@ _kalloc_end
     EXPORT  _kfree
 _kfree
 
-    PUSH    {R1-R12, LR}
+    PUSH    {LR}
 	
 ; r1 = ptr
 	MOV		R1, R0
@@ -181,7 +200,7 @@ _kfree
 
 ; recursive helper for kfree
 _rfree
-    PUSH    {R1-R12, LR}
+    PUSH    {LR}
 
 ; r1 - mcb_addr
 ; r2 - *mcb_addr
@@ -262,7 +281,7 @@ _rfree_odd
     BL      _rfree
     B       _kfree_end
 _kfree_end
-    POP     {R1-R12, LR}
+    POP     {LR}
     BX      LR    
 	
 	END

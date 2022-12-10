@@ -77,7 +77,7 @@ void* _ralloc(int size, int left_mcb_addr, int right_mcb_addr) {
 	int act_entire_heap_size = entire_mcb_addr_space * 16; 					 // size of the heap 	
 	int act_half_heap_size = half_mcb_addr_space * 16; 						 // half the size of the heap
 
-	// base case if amount of memory to allocate is less than half of the heap size
+	// recursive case if amount of memory to allocate is less than half of the heap size
 	if (size <= act_half_heap_size) {
 		// recurse left to find addresses to allocate at
 		void* heap_addr = _ralloc(size, left_mcb_addr, midpoint_mcb_addr - mcb_ent_sz);
@@ -93,9 +93,9 @@ void* _ralloc(int size, int left_mcb_addr, int right_mcb_addr) {
 		// returns current heap pointer
 		return heap_addr;
 	}
-	// recursive case if address is odd return 0
+	// base case if address is odd return 0
 	else {
-		if ((array[m2a(left_mcb_addr)] & 0x01) != 0) return 0;  				  // if address is odd, return 0
+		if ((array[m2a(left_mcb_addr)] & 0x01) == 1) return 0;  				  // if address is odd, return 0
 		if (*(short*)&array[m2a(left_mcb_addr)] < act_entire_heap_size) return 0; // if address is less than the heap size return 0
 		*(short*)&array[m2a(left_mcb_addr)] = act_entire_heap_size | 0x01;        // sets LSB to 1
 		return (void*)(heap_top + (left_mcb_addr - mcb_top) * 16);                // returns new heap pointer
