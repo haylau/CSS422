@@ -1,5 +1,5 @@
-		AREA	|.text|, CODE, READONLY, ALIGN=2
-		THUMB
+        AREA	|.text|, CODE, READONLY, ALIGN=2
+        THUMB
 
 HEAP_TOP        EQU     0x20001000
 HEAP_BOT        EQU     0x20004FE0
@@ -34,12 +34,12 @@ INVALID         EQU     -1
     EXPORT  _kinit
 _kinit
     PUSH    {R1-R12, LR}
-	LDR		R0, =MCB_TOP
-	LDR		R1, =MAX_SIZE
-	STR		R1, [R0]
-	MOV		R2, #0
+    LDR		R0, =MCB_TOP
+    LDR		R1, =MAX_SIZE
+    STR		R1, [R0]
+    MOV		R2, #0
 
-	LDR		R0, =HEAP_TOP
+    LDR		R0, =HEAP_TOP
     LDR     R1, =HEAP_BOUND
 _kinit_heap
     CMP		R0, R1
@@ -47,17 +47,17 @@ _kinit_heap
     ITTT    GT
     LDRGT   R0, =MCB_LBOUND
     LDRGT   R1, =MCB_UBOUND
-	BGT		_kinit_mcb
-	STRH	R2, [R0], #2
-	B		_kinit_heap
+    BGT		_kinit_mcb
+    STRH	R2, [R0], #2
+    B		_kinit_heap
 _kinit_mcb	
-	CMP		R0, R1
+    CMP		R0, R1
     BGT     _kinit_end
-	STRB	R2, [R0], #1
-	B		_kinit_mcb
+    STRB	R2, [R0], #1
+    B		_kinit_mcb
 _kinit_end		
     POP     {R1-R12, LR}
-	BX		LR
+    BX		LR
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Kernel Memory Allocation
@@ -78,7 +78,7 @@ _kalloc
 
 ; recursive helper for kalloc
 _ralloc
-	PUSH	{LR}
+    PUSH	{LR}
 ; r0 = size
 ; r1 = left_mcb_address
 ; r2 = right_mcb_address
@@ -103,12 +103,12 @@ _ralloc
     BGT     _ralloc_tophalf ; base case
 
     PUSH    {R1-R12}
-	MOV		R10, R0		; preserve r0
+    MOV		R10, R0		; preserve r0
     SUB     R2, R6, R3  ; right = midpoint - mcb_ent_size
     BL      _ralloc
     POP     {R1-R12}
-	MOV     R7, R0      ; heap_addr = ralloc(  )
-	MOV		R0, R10		; restore r0
+    MOV     R7, R0      ; heap_addr = ralloc(  )
+    MOV		R0, R10		; restore r0
 
     CMP     R7, #0
     BEQ     _ralloc_ptrzero
@@ -149,9 +149,9 @@ _ralloc_tophalf
 ; return (heap_top + (left_mcb_addr - mcb_top) * 16)
     LDR     R10, =MCB_TOP
     SUB     R10, R1, R10
+	LSL     R10, R10, #4
     LDR     R11, =HEAP_TOP
-    ADD     R10, R11, R10
-	LSL     R0, R10, #4
+    ADD     R0, R11, R10
     B       _kalloc_end
 
 _kalloc_end
@@ -164,45 +164,48 @@ _kalloc_end
 ; ptr               - pointer to the memory space to be deallocated
     EXPORT  _kfree
 _kfree
-
+; r0 = addr | param0
     PUSH    {LR}
-	
-; r1 = ptr
-	MOV		R1, R0
-
+; r1 = addr
+    MOV		R1, R0
+; r2 = heap_top
     LDR     R2, =HEAP_TOP
+; r3 = heap_bot
     LDR     R3, =HEAP_BOT
-
+; if (addr < heap_top) return nullptr
     CMP     R1, R2
     ITT     LT
     MOVLT   R0, #0
     BLT     _kfree_end   
-
+; if (addr > heap_bot) return nullptr
     CMP     R1, R3
     ITT     GT
     MOVGT   R0, #0
     BGT     _kfree_end
-
+; offset addr to heap
     LDR     R4, =MCB_TOP
     ADD     R4, R4, R1
     SUB     R4, R4, R2
     LSR     R4, R4, #4
-
-    PUSH    {R1}
-    MOV     R1, R4
-    BL      _kfree_end
-    POP     {R1}
-    CMP     R0, #0
-    ITE   EQ
-    MOVEQ   R0, #0
-    MOVNE   R0, R1
-    BNE    _kfree_end
+; subroutine call
+    PUSH    {R1}        ; preserve addr
+    MOV     R0, R4      ; param0 = ptr
+    BL      _rfree      ; r0 = return    
+    POP     {R1}        ; restore addr
+    ; if _rfree( ) == nullptr
+    CMP     R0, #0      
+    ITE    EQ          
+    MOVEQ   R0, #0        ; return nullptr
+    MOVNE   R0, R1        ; else return addr
+    B       _kfree_end
 
 ; recursive helper for kfree
 _rfree
     PUSH    {LR}
+; r0 = mcb_addr | param0
 
 ; r1 - mcb_addr
+    MOV     R1, R0
 ; r2 - *mcb_addr
     LDRH    R2, [R1]
 ; r3 - MCB_TOP
@@ -218,43 +221,53 @@ _rfree
 ; r7 - MCB_BOT
     LDR     R7, =MCB_BOT
 
-    STRH    R1, [R2]    ; store free'd bytes
+; store free'd bytes
+    STRH    R1, [R2]    
 
-    UDIV     R0, R4, R5
-    RORS    R0, R0, #1
-    BCS     _rfree_odd
+; if mcb has used bit
+    UDIV    R0, R4, R5
+    LSRS    R0, R0, #1
+    BCS     _rfree_used
 
+; if mcb_buddy is outside mcb region
     ADD     R0, R1, R5
     CMP     R0, R7
     ITT     GE
     MOVGE   R0, #0
     BGE     _kfree_end
 
-    ADD     R0, R1, R5
-; r8 = mcb_buddy
-    LDRH    R8, [R0]
-    RORS    R0, R8, #1
+; r8 = mcb_buddy = *(mcb_addr + mcb_disp)
+    ADD     R8, R1, R5
+    LDRH    R8, [R8]
+; if mcb_buddy does not have cleared 
+    LSRS    R0, R8, #1
     ITT     CS
     MOVCS   R1, R0
     BCS     _kfree_end
-
+; clear [LSB+5, LSB] region
     LSR     R8, R8, #5
     LSL     R8, R8, R5
+
+; if !(mcb_buddy = my_size) return mcb_addr
     CMP     R8, R6
     ITT     NE
     MOVNE   R0, R1
     BNE     _kfree_end
+; clear mcb_addr + mcb_disp
     ADD     R0, R1, R5
     MOV     R9, #0
     STRH    R9, [R0]
-
+; my_size *= 2 / merge regions
     LSL     R6, R6, #1
+; store doubled region
     STRH    R6, [R1]
-
+    PUSH    {LR}
     BL      _rfree
+    POP     {LR}
     B       _kfree_end          
 
-_rfree_odd
+_rfree_used
+; if (mcb_addr - mcb_disp < mcb_top) 
     SUB     R0, R1, R5
     CMP     R0, R3
     ITT     LT
@@ -278,10 +291,13 @@ _rfree_odd
     STRH    R6, [R0]
 
     SUB     R1, R1, R5
+    PUSH    {LR}
     BL      _rfree
+    POP     {LR}
     B       _kfree_end
+
 _kfree_end
     POP     {LR}
     BX      LR    
-	
-	END
+    
+    END
