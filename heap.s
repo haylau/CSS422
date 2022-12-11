@@ -47,12 +47,12 @@ _kinit_heap
     ITTT    GT
     LDRGT   R0, =MCB_LBOUND
     LDRGT   R1, =MCB_UBOUND
-    BGT		_kinit_mcb
+    BGE		_kinit_mcb
     STRH	R2, [R0], #2
     B		_kinit_heap
 _kinit_mcb	
     CMP		R0, R1
-    BGT     _kinit_end
+    BGE     _kinit_end
     STRB	R2, [R0], #1
     B		_kinit_mcb
 _kinit_end		
@@ -138,7 +138,7 @@ _ralloc_tophalf
 
 ; if *left_mcb_addr < act_entire_heap_size --> return 0 
     LDRH    R10, [R1]
-    CMP     R10, R9
+    CMP     R10, R8
     ITT     LT
     MOVLT   R0, #0
     BLT     _kalloc_end
@@ -168,7 +168,7 @@ _kfree
     PUSH    {LR}
 ; r1 = addr
     MOV		R1, R0
-; r2 = heap_top
+; r2 = heap_ top
     LDR     R2, =HEAP_TOP
 ; r3 = heap_bot
     LDR     R3, =HEAP_BOT
@@ -182,11 +182,12 @@ _kfree
     ITT     GT
     MOVGT   R0, #0
     BGT     _kfree_end
-; offset addr to heap
-    LDR     R4, =MCB_TOP
-    ADD     R4, R4, R1
-    SUB     R4, R4, R2
-    LSR     R4, R4, #4
+; mcb_top + (addr - heap_top) / 16;
+; offset heap addr to mcb arr
+    LDR     R0, =MCB_TOP
+    SUB     R4, R1, R2	; addr - heap_top
+    LSR     R4, R4, #4	;(addr - heap_top) / 16
+    ADD     R4, R4, R0	; mcb_top + (addr - heap_top) / 16
 ; subroutine call
     PUSH    {R1}        ; preserve addr
     MOV     R0, R4      ; param0 = ptr
@@ -206,7 +207,7 @@ _rfree
 
 ; r1 - mcb_addr
     MOV     R1, R0
-; r2 - *mcb_addr
+; r2 - *mcb_addr --> mcb_contents
     LDRH    R2, [R1]
 ; r3 - MCB_TOP
     LDR     R3, =MCB_TOP
@@ -222,7 +223,7 @@ _rfree
     LDR     R7, =MCB_BOT
 
 ; store free'd bytes
-    STRH    R1, [R2]    
+    STRH    R2, [R1]    
 
 ; if mcb has used bit
     UDIV    R0, R4, R5

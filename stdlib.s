@@ -8,19 +8,19 @@
 ;	size		- a number of bytes to zero-initialize
 ; Return value
 ;   none
-	EXPORT	_bzero
+		EXPORT	_bzero
 _bzero
-	; R0 = ptr
-	; R1 = size
-	PUSH 	{R1-R12,LR}		; save registers
-	MOV		R2, #0			; R2 = 0
+		; R0 = ptr
+		; R1 = size
+		PUSH 	{R1-R12,LR}		; save registers
+		MOV		R2, #0			; R2 = 0
 _bzero_loop
-	STRB	R2, [R0], #1	; set [R0] to zero
-	SUBS	R1, R1, #1		; decrement pointer
-	BGE		_bzero_loop		; if R1 >= 1, repeat loop
-	
-	POP 	{R1-R12,LR}		; restore registers
-	BX		LR				; return
+		STRB	R2, [R0], #1	; set [R0] to zero
+		SUBS	R1, R1, #1		; decrement pointer
+		BGE		_bzero_loop		; if R1 >= 1, repeat loop
+		
+		POP 	{R1-R12,LR}		; restore registers
+		BX		LR				; return
 
 
 
@@ -33,7 +33,7 @@ _bzero_loop
 ;	size	- a total of n bytes
 ; Return value
 ;   dest
-	EXPORT	_strncpy
+		EXPORT	_strncpy
 _strncpy
 ; R0 = dest
 ; R1 = src
@@ -58,13 +58,13 @@ _strncpy_end
 ;	size	- #bytes to allocate
 ; Return value
 ;   void*	a pointer to the allocated space
-	EXPORT	_malloc
+		EXPORT	_malloc
 _malloc
 ; R0 = size
 	PUSH 	{R1-R12,LR}		
 	
-	MOV		R7, #1
-	SVC		#0
+	MOV		R7, #1			; sys call number
+	SVC		#0				; superviser call
 
 	POP 	{R1-R12,LR}	
 	BX		LR
@@ -75,13 +75,13 @@ _malloc
 ;	size	- the address of a space to deallocate
 ; Return value
 ;   none
-	EXPORT	_free
+		EXPORT	_free
 _free
 ; R0 = addr
 	PUSH 	{R1-R12,LR}		
 
-	MOV		R7,	#2
-	SVC		#0
+	MOV		R7,	#2			; sys call number
+	SVC		#0				; superviser call
 
 	POP 	{R1-R12,LR}	
 	BX		LR
